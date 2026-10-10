@@ -71,7 +71,7 @@ def validate_schema(parsed: dict) -> None:
     float(parsed["confidence"])  # raises if not numeric
 
 def call_with_retry(client, model_name: str, prompt: str, config: dict) -> str:
-    # retry on rate limit errors only - empty responses are not retried at temperature=0
+    # retry on rate limit errors and empty responses - both are transient on hosted apis
     for attempt in range(config["max_retries"]):
         try:
             response = client.chat.completions.create(
@@ -83,16 +83,15 @@ def call_with_retry(client, model_name: str, prompt: str, config: dict) -> str:
             if not raw or not raw.strip():
                 raise EmptyResponseError("llm returned an empty response")
             return raw
-        except EmptyResponseError:
-            # empty response at temperature=0 is deterministic - retrying wastes quota
-            raise
         except Exception as e:
             is_rate_limit = "429" in str(e) or "rate_limit" in str(e).lower()
+            is_empty = isinstance(e, EmptyResponseError)
             is_last_attempt = attempt == config["max_retries"] - 1
 
-            if is_rate_limit and not is_last_attempt:
+            if (is_rate_limit or is_empty) and not is_last_attempt:
                 wait = config["retry_wait"] * (attempt + 1)
-                print(f"  rate limit hit, waiting {wait}s before retry {attempt + 2}/{config['max_retries']}...")
+                reason = "rate limit" if is_rate_limit else "empty response"
+                print(f"  {reason}, waiting {wait}s before retry {attempt + 2}/{config['max_retries']}...")
                 time.sleep(wait)
             else:
                 raise
