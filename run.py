@@ -12,16 +12,16 @@ api_key = os.environ.get("GROQ_API_KEY")
 if not api_key:
     raise EnvironmentError("GROQ_API_KEY is not set")
 
-model_name = os.environ.get("GROQ_MODEL")
-input_file = os.environ.get("INPUT_FILE", "messages.json")
-output_file = os.environ.get("OUTPUT_FILE", "results.json")
+model_name    = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
+input_file    = os.environ.get("INPUT_FILE", "messages.json")
+output_file   = os.environ.get("OUTPUT_FILE", "results.json")
 delay_between = float(os.environ.get("DELAY_BETWEEN_CALLS", "2"))
 
 # config passed into triage logic - all values come from .env
 config = {
-    "confidence_threshold": float(os.environ.get("CONFIDENCE_THRESHOLD")),
-    "max_retries": int(os.environ.get("MAX_RETRIES")),
-    "retry_wait": int(os.environ.get("RETRY_WAIT_SECONDS")),
+    "confidence_threshold": float(os.environ.get("CONFIDENCE_THRESHOLD", "0.75")),
+    "max_retries":          int(os.environ.get("MAX_RETRIES", "3")),
+    "retry_wait":           int(os.environ.get("RETRY_WAIT_SECONDS", "30")),
 }
 
 client = Groq(api_key=api_key)
