@@ -75,7 +75,10 @@ def call_with_retry(client, model_name: str, prompt: str, config: dict) -> str:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0,
             )
-            return response.choices[0].message.content
+            raw = response.choices[0].message.content
+            if not raw or not raw.strip():
+                raise ValueError("llm returned an empty response")
+            return raw
         except Exception as e:
             is_rate_limit = "429" in str(e) or "rate_limit" in str(e).lower()
             is_last_attempt = attempt == config["max_retries"] - 1
@@ -150,13 +153,13 @@ def triage_message(message, client, model_name: str, config: dict) -> dict:
         notes = "" if "medical_advice" in flags else parsed.get("notes", "")
 
         result.update({
-            "intents": parsed["intents"],
-            "entities": parsed["entities"],
-            "action": parsed["action"],
-            "route_to": route_to,
-            "confidence": confidence,
-            "flags": flags,
-            "notes": notes,
+            "intents":      parsed["intents"],
+            "entities":     parsed["entities"],
+            "action":       parsed["action"],
+            "route_to":     route_to,
+            "confidence":   confidence,
+            "flags":        flags,
+            "notes":        notes,
             "human_review": needs_human_review(confidence, flags, route_to, config["confidence_threshold"]),
         })
 
