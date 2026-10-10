@@ -30,6 +30,10 @@ Rules:
 - Return only valid JSON, no markdown, no explanation.
 """
 
+# dedicated error type for empty llm responses - avoids matching on exception message text
+class EmptyResponseError(Exception):
+    pass
+
 # flags that always require a human regardless of confidence
 HUMAN_REVIEW_FLAGS = {"prompt_injection", "medical_advice", "live_emergency", "ambiguous", "parse_error", "suspicious"}
 
@@ -67,7 +71,8 @@ def validate_schema(parsed: dict) -> None:
     float(parsed["confidence"])  # raises if not numeric
 
 def call_with_retry(client, model_name: str, prompt: str, config: dict) -> str:
-    # call the api and retry on rate limit errors
+    # retry on rate limit errors with configured backoff
+    # retry on empty responses with a short fixed wait - separate from rate limit sleep
     for attempt in range(config["max_retries"]):
         try:
             response = client.chat.completions.create(
@@ -77,27 +82,35 @@ def call_with_retry(client, model_name: str, prompt: str, config: dict) -> str:
             )
             raw = response.choices[0].message.content
             if not raw or not raw.strip():
-                raise ValueError("llm returned an empty response")
+                raise EmptyResponseError("llm returned an empty response")
             return raw
         except Exception as e:
             is_rate_limit = "429" in str(e) or "rate_limit" in str(e).lower()
+            is_empty = isinstance(e, EmptyResponseError)
             is_last_attempt = attempt == config["max_retries"] - 1
 
-            if is_rate_limit and not is_last_attempt:
+            if is_last_attempt:
+                raise
+            if is_rate_limit:
                 wait = config["retry_wait"] * (attempt + 1)
-                print(f"  rate limit hit, waiting {wait}s before retry {attempt + 2}/{config['max_retries']}...")
+                print(f"  rate limit, waiting {wait}s before retry {attempt + 2}/{config['max_retries']}...")
                 time.sleep(wait)
+            elif is_empty:
+                print(f"  empty response, retrying {attempt + 2}/{config['max_retries']}...")
+                time.sleep(2)
             else:
                 raise
 
 def needs_human_review(confidence: float, flags: list, route_to: str, threshold: float) -> bool:
-    # ignore means no actionable content - no human needed
+    # sensitive flags always require human review regardless of route
+    if HUMAN_REVIEW_FLAGS.intersection(set(flags)):
+        return True
+    # ignore means no actionable content - no human needed beyond flag check above
     if route_to == "ignore":
         return False
-    # human review rule: low confidence, sensitive flags, or explicit human routing
+    # human review rule: low confidence or explicit human routing
     return (
         confidence < threshold
-        or bool(HUMAN_REVIEW_FLAGS.intersection(set(flags)))
         or route_to in ("human_agent", "urgent_human")
     )
 
