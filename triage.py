@@ -166,13 +166,13 @@ def triage_message(message, client, model_name: str, config: dict) -> dict:
         notes = "" if "medical_advice" in flags else parsed.get("notes", "")
 
         result.update({
-            "intents": parsed["intents"],
-            "entities": parsed["entities"],
-            "action": parsed["action"],
-            "route_to": route_to,
-            "confidence": confidence,
-            "flags": flags,
-            "notes": notes,
+            "intents":      parsed["intents"],
+            "entities":     parsed["entities"],
+            "action":       parsed["action"],
+            "route_to":     route_to,
+            "confidence":   confidence,
+            "flags":        flags,
+            "notes":        notes,
             "human_review": needs_human_review(confidence, flags, route_to, config["confidence_threshold"]),
         })
 
